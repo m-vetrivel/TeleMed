@@ -1,17 +1,17 @@
 import axios from 'axios';
 
-// 1. Point to your Spring Boot Backend
-const API_URL = 'http://localhost:8080/api';
+// Your current Localtunnel Backend URL
+const API_URL = 'https://justa-preoccasioned-sharlene.ngrok-free.dev/api';
 
-// 2. Create an Axios Instance
 const api = axios.create({
     baseURL: API_URL,
     headers: {
         'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true', // Useful if you switch to ngrok later
+        'Bypass-Tunnel-Reminder': 'true'      // <--- ADD THIS for Localtunnel
     }
 });
 
-// 3. Automatically add the JWT Token to every request
 api.interceptors.request.use(config => {
     const token = localStorage.getItem('token');
     if (token) {
