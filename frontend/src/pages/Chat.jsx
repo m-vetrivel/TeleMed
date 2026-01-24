@@ -327,8 +327,6 @@
 // export default Chat;
 
 
-
-
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Client } from '@stomp/stompjs';
@@ -345,15 +343,18 @@ const Chat = () => {
     const [isAppointmentActive, setIsAppointmentActive] = useState(false);
     const [loadingCheck, setLoadingCheck] = useState(true);
     const [activeAppointmentId, setActiveAppointmentId] = useState(null);
-    
-    // Upload State
     const [isUploading, setIsUploading] = useState(false);
+
+    // --- NEW: MENTION SYSTEM STATE ---
+    const [showMentions, setShowMentions] = useState(false);
+    const [myReports, setMyReports] = useState([]);
+    const [mentionFilter, setMentionFilter] = useState("");
 
     // --- REFS ---
     const stompClientRef = useRef(null);
     const jitsiContainerRef = useRef(null); 
     const jitsiApiRef = useRef(null);
-    const fileInputRef = useRef(null); // Ref for hidden file input
+    const fileInputRef = useRef(null); 
 
     // --- HELPER: FORMAT TIME ---
     const formatTime = (isoString) => {
@@ -378,16 +379,28 @@ const Chat = () => {
                 localStorage.removeItem('token'); navigate('/'); return;
             }
 
+            // --- FETCH REPORTS (For @mentions) ---
+            try {
+                const reportRes = await api.get('/files/reports');
+                setMyReports(reportRes.data);
+            } catch (err) { console.error("Failed to load reports"); }
+
+            // --- CHECK APPOINTMENT STATUS ---
             try {
                 const res = await api.get('/appointments');
                 const now = new Date();
+                
                 const activeAppt = res.data.find(appt => {
-                    const isMyDoctor = appt.doctor?.user?.email === recipientEmail && appt.patient?.email === payload.sub;
-                    const isMyPatient = appt.patient?.email === recipientEmail && appt.doctor?.user?.email === payload.sub;
+                    const patientEmail = appt.patient?.user?.email || appt.patient?.email;
+                    const doctorEmail = appt.doctor?.user?.email || appt.doctor?.email;
+                    const isMyDoctor = doctorEmail === recipientEmail && patientEmail === payload.sub;
+                    const isMyPatient = patientEmail === recipientEmail && doctorEmail === payload.sub;
+
                     if (!isMyDoctor && !isMyPatient) return false;
+
                     const start = new Date(appt.appointmentTime);
-                    const end = new Date(appt.endTime);
-                    return now >= start && now <= end;
+                    const isSameDay = now.toDateString() === start.toDateString();
+                    return isSameDay; 
                 });
                 
                 if (mounted && activeAppt) {
@@ -396,14 +409,16 @@ const Chat = () => {
                 }
             } catch (err) { console.error(err); } finally { if (mounted) setLoadingCheck(false); }
 
+            // --- FETCH CHAT HISTORY ---
             try {
                 const history = await api.get(`/messages/${payload.sub}/${recipientEmail}`);
                 if (mounted) setMessages(history.data);
             } catch (err) { console.error(err); }
 
+            // --- WEBSOCKET SETUP ---
             if (stompClientRef.current) stompClientRef.current.deactivate();
             const client = new Client({
-                brokerURL: 'wss://justa-preoccasioned-sharlene.ngrok-free.dev/ws-raw', 
+                brokerURL: 'ws://localhost:8080/ws-raw', 
                 reconnectDelay: 5000,
             });
 
@@ -427,7 +442,7 @@ const Chat = () => {
         };
     }, [recipientEmail, navigate]);
 
-    // 2. JITSI LAUNCHER
+    // 2. JITSI LAUNCHER (Video)
     useEffect(() => {
         if (isAppointmentActive && !loadingCheck && currentUser && jitsiContainerRef.current && activeAppointmentId) {
             if (jitsiApiRef.current) return;
@@ -462,7 +477,44 @@ const Chat = () => {
         }
     }, [isAppointmentActive, loadingCheck, currentUser, activeAppointmentId, navigate]);
 
-    // --- ACTIONS ---
+    // --- NEW: HANDLE INPUT CHANGE (DETECT @) ---
+    const handleInputChange = (e) => {
+        const val = e.target.value;
+        setMsgInput(val);
+
+        // Check if the last word starts with @
+        const lastWord = val.split(" ").pop();
+        if (lastWord.startsWith("@")) {
+            setShowMentions(true);
+            setMentionFilter(lastWord.substring(1).toLowerCase()); // Remove @ for searching
+        } else {
+            setShowMentions(false);
+        }
+    };
+
+    // --- NEW: SEND EXISTING REPORT VIA MENTION ---
+    const sendReport = (report) => {
+        if (!stompClientRef.current) return;
+
+        const chatMessage = {
+            senderEmail: currentUser,
+            recipientEmail: recipientEmail,
+            content: `Shared report: ${report.reportName}`, 
+            fileUrl: `/api/files/${report.id}`, // Use existing ID
+            fileName: report.fileName,
+            type: 'FILE', 
+            timestamp: new Date().toISOString()
+        };
+        
+        stompClientRef.current.publish({ destination: "/app/chat", body: JSON.stringify(chatMessage) });
+        setMessages(prev => [...prev, chatMessage]);
+        
+        // Clear input and hide menu
+        setMsgInput(""); 
+        setShowMentions(false);
+    };
+
+    // --- STANDARD SEND ---
     const sendMessage = () => {
         if (!isAppointmentActive) return alert("Appointment is not active.");
         if (stompClientRef.current && msgInput) {
@@ -470,84 +522,61 @@ const Chat = () => {
                 senderEmail: currentUser,
                 recipientEmail: recipientEmail,
                 content: msgInput,
-                type: 'TEXT', // Standard message
+                type: 'TEXT', 
                 timestamp: new Date().toISOString()
             };
             stompClientRef.current.publish({ destination: "/app/chat", body: JSON.stringify(chatMessage) });
             setMessages(prev => [...prev, chatMessage]);
             setMsgInput("");
+            setShowMentions(false);
         }
     };
 
-    // --- FILE UPLOAD LOGIC ---
+    // --- FILE UPLOAD (New Files) ---
     const handleFileSelect = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-
         setIsUploading(true);
         const formData = new FormData();
         formData.append("file", file);
+        formData.append("reportName", "Chat Doc: " + file.name);
 
         try {
-            // 1. Upload to Java Backend
-            // Use your full Ngrok URL if testing on mobile, or relative path if local
-            const uploadRes = await api.post('/files/upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-
-            // 2. Get the File URL (Response is plain string path)
-            const fileUrl = uploadRes.data; 
-            // Note: If response is relative (/api/files/download/...), prepend backend URL if needed
-            // For now, let's assume the API returns the usable path.
-            
-            // 3. Send WebSocket Message
+            const uploadRes = await api.post('/files/report', formData, { headers: { 'Content-Type': 'multipart/form-data' }});
+            const savedFile = uploadRes.data; 
             if (stompClientRef.current) {
                 const chatMessage = {
                     senderEmail: currentUser,
                     recipientEmail: recipientEmail,
-                    content: `Sent a file: ${file.name}`, // Fallback text
-                    fileUrl: fileUrl, // Custom field for file path
+                    content: `Shared a document: ${file.name}`, 
+                    fileUrl: `/api/files/${savedFile.id}`, 
                     fileName: file.name,
-                    type: 'FILE', // Mark as file
+                    type: 'FILE', 
                     timestamp: new Date().toISOString()
                 };
                 stompClientRef.current.publish({ destination: "/app/chat", body: JSON.stringify(chatMessage) });
                 setMessages(prev => [...prev, chatMessage]);
             }
-        } catch (err) {
-            console.error("Upload failed", err);
-            alert("File upload failed!");
-        } finally {
-            setIsUploading(false);
-            e.target.value = null; // Reset input
-        }
+        } catch (err) { alert("File upload failed!"); } finally { setIsUploading(false); e.target.value = null; }
     };
 
     // --- RENDER MESSAGE CONTENT ---
     const renderMessageContent = (msg) => {
-        // If it's a file message
         if (msg.type === 'FILE' || msg.fileUrl) {
-            const fullUrl = `https://justa-preoccasioned-sharlene.ngrok-free.dev${msg.fileUrl}`;
+            const fullUrl = `http://localhost:8080${msg.fileUrl}`;
             const isImage = msg.fileName?.match(/\.(jpeg|jpg|png|gif)$/i);
-
             return (
                 <div>
-                    {isImage ? (
-                        <div style={{marginBottom: '5px'}}>
-                            <img src={fullUrl} alt="attachment" style={{maxWidth: '200px', borderRadius: '8px'}} />
-                        </div>
-                    ) : (
-                        <div style={{fontSize: '30px'}}>📄</div>
-                    )}
-                    <a href={fullUrl} target="_blank" rel="noreferrer" style={{color: '#007bff', textDecoration: 'underline'}}>
-                        Download {msg.fileName || "File"}
-                    </a>
+                    {isImage ? <img src={fullUrl} alt="attachment" style={{maxWidth: '200px', borderRadius: '8px', border:'1px solid #ddd'}} /> : <div style={{fontSize: '30px'}}>📄</div>}
+                    <a href={fullUrl} target="_blank" rel="noreferrer" style={{color: '#007bff', textDecoration: 'underline'}}>Download {msg.fileName || "File"}</a>
                 </div>
             );
         }
-        // Normal Text
         return msg.content;
     };
+
+    // Filter reports for the dropdown
+    const filteredReports = myReports.filter(r => r.reportName.toLowerCase().includes(mentionFilter));
 
     return (
         <div style={styles.container}>
@@ -569,19 +598,43 @@ const Chat = () => {
                             <div style={styles.timestamp}>{formatTime(msg.timestamp)}</div>
                         </div>
                     ))}
-                    {isUploading && <div style={{textAlign: 'center', color: '#888'}}>Uploading... ⏳</div>}
+                    {isUploading && <div style={{textAlign: 'center', color: '#888'}}>Uploading to Health Records... ⏳</div>}
                 </div>
 
                 <div style={styles.inputArea}>
-                    {/* Hidden File Input */}
-                    <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        style={{display: 'none'}} 
-                        onChange={handleFileSelect}
-                    />
                     
-                    {/* Paperclip Button */}
+                    {/* --- MENTION POPUP (New) --- */}
+                    {showMentions && (
+                        <div style={styles.mentionPopup}>
+                            <div style={styles.mentionHeader}>
+                                Select a Report to Send
+                                <button 
+                                    onClick={() => setShowMentions(false)}
+                                    style={{float:'right', background:'none', border:'none', cursor:'pointer', fontSize:'0.8rem'}}
+                                >❌</button>
+                            </div>
+                            
+                            {filteredReports.length > 0 ? (
+                                filteredReports.map(report => (
+                                    <div 
+                                        key={report.id} 
+                                        style={styles.mentionItem}
+                                        onClick={() => sendReport(report)}
+                                    >
+                                        📄 {report.reportName}
+                                    </div>
+                                ))
+                            ) : (
+                                <div style={{padding:'10px', color:'#999', fontStyle:'italic', fontSize:'0.85rem'}}>
+                                    No reports found matching "{mentionFilter}".<br/>
+                                    <small>Upload reports in your Profile first.</small>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <input type="file" ref={fileInputRef} style={{display: 'none'}} onChange={handleFileSelect}/>
+                    
                     <button 
                         onClick={() => fileInputRef.current.click()} 
                         style={styles.attachBtn} 
@@ -591,7 +644,13 @@ const Chat = () => {
                         📎
                     </button>
 
-                    <input value={msgInput} onChange={(e) => setMsgInput(e.target.value)} style={styles.input} disabled={!isAppointmentActive}/>
+                    <input 
+                        value={msgInput} 
+                        onChange={handleInputChange} // <--- UPDATED HANDLER
+                        style={styles.input} 
+                        disabled={!isAppointmentActive}
+                        placeholder="Type message or @ to send report..."
+                    />
                     <button onClick={sendMessage} style={styles.sendBtn} disabled={!isAppointmentActive}>Send</button>
                 </div>
             </div>
@@ -602,19 +661,49 @@ const Chat = () => {
 const styles = {
     container: { display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' },
     videoSection: { flex: 7, background: '#000', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRight: '1px solid #333' },
-    chatSection: { flex: 3, display: 'flex', flexDirection: 'column', background: '#f8f9fa' },
+    chatSection: { flex: 3, display: 'flex', flexDirection: 'column', background: '#f8f9fa', position: 'relative' }, 
     chatHeader: { padding: '15px', background: '#007bff', color: 'white' },
     chatBox: { flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' },
     myMsg: { alignSelf: 'flex-end', background: '#dcf8c6', padding: '8px 12px', borderRadius: '10px 10px 0 10px', maxWidth: '80%', boxShadow: '0 1px 1px rgba(0,0,0,0.1)' },
     theirMsg: { alignSelf: 'flex-start', background: '#fff', padding: '8px 12px', borderRadius: '10px 10px 10px 0', border: '1px solid #ddd', maxWidth: '80%', boxShadow: '0 1px 1px rgba(0,0,0,0.1)' },
     msgContent: { marginBottom: '4px' },
     timestamp: { fontSize: '0.75rem', color: '#666', textAlign: 'right', marginTop: '2px' },
-    inputArea: { padding: '15px', display: 'flex', gap: '10px', background: '#eee', alignItems: 'center' },
+    inputArea: { padding: '15px', display: 'flex', gap: '10px', background: '#eee', alignItems: 'center', position: 'relative' }, 
     input: { flex: 1, padding: '10px', borderRadius: '5px', border: '1px solid #ccc' },
     sendBtn: { padding: '10px 20px', background: '#28a745', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' },
     attachBtn: { padding: '10px', background: '#6c757d', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '1.2rem' },
     inactiveMsg: { textAlign: 'center', color: 'white' },
-    backBtn: { marginTop: '20px', padding: '10px 20px', background: '#dc3545', color: 'white', border: 'none', cursor: 'pointer', borderRadius: '4px'}
+    backBtn: { marginTop: '20px', padding: '10px 20px', background: '#dc3545', color: 'white', border: 'none', cursor: 'pointer', borderRadius: '4px'},
+    
+    // --- NEW POPUP STYLES ---
+    mentionPopup: {
+        position: 'absolute',
+        bottom: '70px',
+        left: '20px',
+        width: '250px',
+        background: 'white',
+        border: '1px solid #ccc',
+        borderRadius: '8px',
+        boxShadow: '0 -4px 15px rgba(0,0,0,0.2)',
+        zIndex: 9999,
+        maxHeight: '200px',
+        overflowY: 'auto'
+    },
+    mentionHeader: {
+        padding: '8px',
+        fontSize: '0.8rem',
+        color: '#666',
+        background: '#f8f9fa',
+        borderBottom: '1px solid #eee'
+    },
+    mentionItem: {
+        padding: '10px',
+        cursor: 'pointer',
+        borderBottom: '1px solid #eee',
+        fontSize: '0.9rem',
+        transition: 'background 0.2s',
+        ':hover': { background: '#f0f0f0' }
+    }
 };
 
 export default Chat;

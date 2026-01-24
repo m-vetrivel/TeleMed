@@ -4,6 +4,8 @@ import Register from './pages/Register'; // <--- 1. Import this
 import Dashboard from './pages/Dashboard';
 import Chat from './pages/Chat';
 import PrivateRoute from './components/PrivateRoute.jsx'; // Assuming you have this wrapper
+import DoctorProfile from './pages/DoctorProfile';
+import PatientProfile from './pages/PatientProfile';
 
 function App() {
   return (
@@ -34,6 +36,16 @@ function App() {
             </PrivateRoute>
           }
         />
+        <Route 
+          path="/doctor/:id" 
+          element={
+            <PrivateRoute>
+              <DoctorProfile />
+            </PrivateRoute>
+          } 
+        />
+        <Route path="/patient/profile" element={<PatientProfile />} />
+
       </Routes>
     </Router>
   );

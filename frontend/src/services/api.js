@@ -1,14 +1,14 @@
 import axios from 'axios';
 
 // Your current Localtunnel Backend URL
-const API_URL = 'https://justa-preoccasioned-sharlene.ngrok-free.dev/api';
+const API_URL = 'http://localhost:8080/api';
 
 const api = axios.create({
     baseURL: API_URL,
     headers: {
         'Content-Type': 'application/json',
-        'ngrok-skip-browser-warning': 'true', // Useful if you switch to ngrok later
-        'Bypass-Tunnel-Reminder': 'true'      // <--- ADD THIS for Localtunnel
+        // 'ngrok-skip-browser-warning': 'true', // Useful if you switch to ngrok later
+        // 'Bypass-Tunnel-Reminder': 'true'      // <--- ADD THIS for Localtunnel
     }
 });
 
