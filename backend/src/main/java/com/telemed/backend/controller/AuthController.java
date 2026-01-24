@@ -1,5 +1,6 @@
 package com.telemed.backend.controller;
 
+import com.telemed.backend.dto.AuthenticationResponse; // Import DTO
 import com.telemed.backend.dto.RegisterRequest;
 import com.telemed.backend.service.AuthService;
 import lombok.RequiredArgsConstructor;
@@ -15,15 +16,15 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<String> register(@RequestBody RegisterRequest request) {
-        String response = authService.register(request);
-        return ResponseEntity.ok(response);
+    // Changed String -> AuthenticationResponse
+    public ResponseEntity<AuthenticationResponse> register(@RequestBody RegisterRequest request) {
+        return ResponseEntity.ok(authService.register(request));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<String> login(@RequestBody LoginRequest request) {
-        String token = authService.login(request);
-        return ResponseEntity.ok(token);
+    // Changed String -> AuthenticationResponse
+    public ResponseEntity<AuthenticationResponse> login(@RequestBody LoginRequest request) {
+        return ResponseEntity.ok(authService.login(request));
     }
 
     @GetMapping("/profile")

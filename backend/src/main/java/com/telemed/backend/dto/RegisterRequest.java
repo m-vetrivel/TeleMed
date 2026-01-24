@@ -1,16 +1,29 @@
 package com.telemed.backend.dto;
 
-import com.telemed.backend.model.enums.Role;
 import lombok.Data;
 
 @Data
 public class RegisterRequest {
-    private String fullName;
+    // Core Auth
     private String email;
     private String password;
-    private Role role; // PATIENT or DOCTOR
+    private String role; // "PATIENT" or "DOCTOR"
 
-    // Optional fields for Doctors
+    // Common Profile
+    private String fullName;
+    private String gender;
+
+    // Patient Specific
+    private String preExistingConditions;
+    private String familyMedicalHistory;
+    private String allergies;
+    private String currentMedications;
+    private String previousSurgeries;
+    private String preferredDoctorGender;
+    private String preferredLanguage;
+
+    // Doctor Specific
     private String specialization;
+    private Integer experienceYears;
     private String licenseNumber;
 }

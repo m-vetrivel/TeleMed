@@ -329,7 +329,6 @@
 
 
 
-
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Client } from '@stomp/stompjs';
@@ -346,29 +345,26 @@ const Chat = () => {
     const [isAppointmentActive, setIsAppointmentActive] = useState(false);
     const [loadingCheck, setLoadingCheck] = useState(true);
     const [activeAppointmentId, setActiveAppointmentId] = useState(null);
+    
+    // Upload State
+    const [isUploading, setIsUploading] = useState(false);
 
     // --- REFS ---
     const stompClientRef = useRef(null);
     const jitsiContainerRef = useRef(null); 
     const jitsiApiRef = useRef(null);
+    const fileInputRef = useRef(null); // Ref for hidden file input
 
     // --- HELPER: FORMAT TIME ---
     const formatTime = (isoString) => {
         if (!isoString) return "";
         const date = new Date(isoString);
-        return date.toLocaleString('en-US', { 
-            hour: 'numeric', 
-            minute: 'numeric', 
-            hour12: true, 
-            month: 'short', 
-            day: 'numeric' 
-        });
+        return date.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
     };
 
     // 1. DATA FETCHING & WEBSOCKET SETUP
     useEffect(() => {
         let mounted = true;
-
         const setupPage = async () => {
             const token = localStorage.getItem('token');
             if (!token) { navigate('/'); return; }
@@ -376,29 +372,19 @@ const Chat = () => {
             let payload;
             try {
                 const parts = token.split('.');
-                if (parts.length !== 3) throw new Error("Invalid Token");
                 payload = JSON.parse(atob(parts[1]));
-                if (Date.now() >= payload.exp * 1000) throw new Error("Token Expired");
-                
                 if (mounted) setCurrentUser(payload.sub);
             } catch (e) {
-                console.error("Auth Error:", e);
-                localStorage.removeItem('token');
-                navigate('/');
-                return;
+                localStorage.removeItem('token'); navigate('/'); return;
             }
 
-            // CHECK APPOINTMENT VALIDITY
             try {
                 const res = await api.get('/appointments');
                 const now = new Date();
-                
                 const activeAppt = res.data.find(appt => {
                     const isMyDoctor = appt.doctor?.user?.email === recipientEmail && appt.patient?.email === payload.sub;
                     const isMyPatient = appt.patient?.email === recipientEmail && appt.doctor?.user?.email === payload.sub;
-                    
                     if (!isMyDoctor && !isMyPatient) return false;
-
                     const start = new Date(appt.appointmentTime);
                     const end = new Date(appt.endTime);
                     return now >= start && now <= end;
@@ -408,26 +394,17 @@ const Chat = () => {
                     setIsAppointmentActive(true);
                     setActiveAppointmentId(activeAppt.id);
                 }
-            } catch (err) { 
-                console.error("Appointment check failed:", err); 
-            } finally { 
-                if (mounted) setLoadingCheck(false); 
-            }
+            } catch (err) { console.error(err); } finally { if (mounted) setLoadingCheck(false); }
 
-            // LOAD CHAT HISTORY
             try {
                 const history = await api.get(`/messages/${payload.sub}/${recipientEmail}`);
                 if (mounted) setMessages(history.data);
             } catch (err) { console.error(err); }
 
-            // WEBSOCKET SETUP
             if (stompClientRef.current) stompClientRef.current.deactivate();
-
             const client = new Client({
                 brokerURL: 'wss://justa-preoccasioned-sharlene.ngrok-free.dev/ws-raw', 
                 reconnectDelay: 5000,
-                heartbeatIncoming: 4000,
-                heartbeatOutgoing: 4000,
             });
 
             client.onConnect = () => {
@@ -439,85 +416,53 @@ const Chat = () => {
                     }
                 });
             };
-
             client.activate();
             stompClientRef.current = client;
         };
-
         setupPage();
-
         return () => {
             mounted = false;
-            if (stompClientRef.current) {
-                stompClientRef.current.deactivate();
-                stompClientRef.current = null;
-            }
-            if (jitsiApiRef.current) {
-                jitsiApiRef.current.dispose();
-                jitsiApiRef.current = null;
-            }
+            if (stompClientRef.current) stompClientRef.current.deactivate();
+            if (jitsiApiRef.current) jitsiApiRef.current.dispose();
         };
     }, [recipientEmail, navigate]);
-
 
     // 2. JITSI LAUNCHER
     useEffect(() => {
         if (isAppointmentActive && !loadingCheck && currentUser && jitsiContainerRef.current && activeAppointmentId) {
             if (jitsiApiRef.current) return;
-
             const loadJitsiScript = () => {
-                if (window.JitsiMeetExternalAPI) {
-                    startJitsiMeeting();
-                    return;
-                }
+                if (window.JitsiMeetExternalAPI) { startJitsiMeeting(); return; }
                 const script = document.createElement("script");
                 script.src = "https://meet.guifi.net/external_api.js";
                 script.async = true;
                 script.onload = () => startJitsiMeeting();
                 document.body.appendChild(script);
             };
-
             const startJitsiMeeting = () => {
                 if (!jitsiContainerRef.current) return;
                 const domain = "meet.guifi.net";
                 const safeRoomName = `TeleMed_Appt_${activeAppointmentId}`;
-
                 const options = {
                     roomName: safeRoomName,
                     width: "100%",
                     height: "100%",
                     parentNode: jitsiContainerRef.current,
                     userInfo: { displayName: currentUser },
-                    configOverwrite: {
-                        startWithAudioMuted: false,
-                        startWithVideoMuted: false,
-                        prejoinPageEnabled: false, 
-                        enableLobby: false 
-                    },
-                    interfaceConfigOverwrite: {
-                        TOOLBAR_BUTTONS: ['microphone', 'camera', 'desktop', 'hangup', 'profile', 'tileview'],
-                        SHOW_JITSI_WATERMARK: false
-                    }
+                    configOverwrite: { startWithAudioMuted: false, startWithVideoMuted: false, prejoinPageEnabled: false, enableLobby: false },
+                    interfaceConfigOverwrite: { TOOLBAR_BUTTONS: ['microphone', 'camera', 'desktop', 'hangup', 'tileview'], SHOW_JITSI_WATERMARK: false }
                 };
-
                 const api = new window.JitsiMeetExternalAPI(domain, options);
                 jitsiApiRef.current = api;
-
                 api.addEventListeners({
-                    videoConferenceLeft: () => {
-                        navigate('/dashboard');
-                        api.dispose();
-                        jitsiApiRef.current = null;
-                    }
+                    videoConferenceLeft: () => { navigate('/dashboard'); api.dispose(); jitsiApiRef.current = null; }
                 });
             };
-
             loadJitsiScript();
         }
     }, [isAppointmentActive, loadingCheck, currentUser, activeAppointmentId, navigate]);
 
-
-    // --- CHAT LOGIC ---
+    // --- ACTIONS ---
     const sendMessage = () => {
         if (!isAppointmentActive) return alert("Appointment is not active.");
         if (stompClientRef.current && msgInput) {
@@ -525,6 +470,7 @@ const Chat = () => {
                 senderEmail: currentUser,
                 recipientEmail: recipientEmail,
                 content: msgInput,
+                type: 'TEXT', // Standard message
                 timestamp: new Date().toISOString()
             };
             stompClientRef.current.publish({ destination: "/app/chat", body: JSON.stringify(chatMessage) });
@@ -533,39 +479,118 @@ const Chat = () => {
         }
     };
 
+    // --- FILE UPLOAD LOGIC ---
+    const handleFileSelect = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+            // 1. Upload to Java Backend
+            // Use your full Ngrok URL if testing on mobile, or relative path if local
+            const uploadRes = await api.post('/files/upload', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+
+            // 2. Get the File URL (Response is plain string path)
+            const fileUrl = uploadRes.data; 
+            // Note: If response is relative (/api/files/download/...), prepend backend URL if needed
+            // For now, let's assume the API returns the usable path.
+            
+            // 3. Send WebSocket Message
+            if (stompClientRef.current) {
+                const chatMessage = {
+                    senderEmail: currentUser,
+                    recipientEmail: recipientEmail,
+                    content: `Sent a file: ${file.name}`, // Fallback text
+                    fileUrl: fileUrl, // Custom field for file path
+                    fileName: file.name,
+                    type: 'FILE', // Mark as file
+                    timestamp: new Date().toISOString()
+                };
+                stompClientRef.current.publish({ destination: "/app/chat", body: JSON.stringify(chatMessage) });
+                setMessages(prev => [...prev, chatMessage]);
+            }
+        } catch (err) {
+            console.error("Upload failed", err);
+            alert("File upload failed!");
+        } finally {
+            setIsUploading(false);
+            e.target.value = null; // Reset input
+        }
+    };
+
+    // --- RENDER MESSAGE CONTENT ---
+    const renderMessageContent = (msg) => {
+        // If it's a file message
+        if (msg.type === 'FILE' || msg.fileUrl) {
+            const fullUrl = `https://justa-preoccasioned-sharlene.ngrok-free.dev${msg.fileUrl}`;
+            const isImage = msg.fileName?.match(/\.(jpeg|jpg|png|gif)$/i);
+
+            return (
+                <div>
+                    {isImage ? (
+                        <div style={{marginBottom: '5px'}}>
+                            <img src={fullUrl} alt="attachment" style={{maxWidth: '200px', borderRadius: '8px'}} />
+                        </div>
+                    ) : (
+                        <div style={{fontSize: '30px'}}>📄</div>
+                    )}
+                    <a href={fullUrl} target="_blank" rel="noreferrer" style={{color: '#007bff', textDecoration: 'underline'}}>
+                        Download {msg.fileName || "File"}
+                    </a>
+                </div>
+            );
+        }
+        // Normal Text
+        return msg.content;
+    };
+
     return (
         <div style={styles.container}>
             <div style={styles.videoSection}>
-                {loadingCheck ? (
-                    <div style={{color:'white'}}>Checking Appointment...</div>
-                ) : isAppointmentActive ? (
-                    <div ref={jitsiContainerRef} style={{ width: '100%', height: '100%' }} />
-                ) : (
-                    <div style={styles.inactiveMsg}>
-                        <h2>🚫 Appointment Not Active</h2>
-                        <button onClick={() => navigate('/dashboard')} style={styles.backBtn}>Back</button>
-                    </div>
-                )}
+                {loadingCheck ? <div style={{color:'white'}}>Checking...</div> : isAppointmentActive ? 
+                    <div ref={jitsiContainerRef} style={{ width: '100%', height: '100%' }} /> : 
+                    <div style={styles.inactiveMsg}><h2>🚫 Not Active</h2><button onClick={() => navigate('/dashboard')} style={styles.backBtn}>Back</button></div>}
             </div>
 
             <div style={styles.chatSection}>
                 <div style={styles.chatHeader}><h4>Chat with {recipientEmail}</h4></div>
-                
                 <div style={styles.chatBox}>
                     {messages.map((msg, idx) => (
                         <div key={msg.timestamp || idx} style={msg.senderEmail === currentUser ? styles.myMsg : styles.theirMsg}>
                             <div style={styles.msgContent}>
-                                <strong>{msg.senderEmail === currentUser ? "Me" : "Them"}: </strong>{msg.content}
+                                <strong>{msg.senderEmail === currentUser ? "Me" : "Them"}: </strong>
+                                {renderMessageContent(msg)}
                             </div>
-                            {/* --- NEW: TIME DISPLAY --- */}
-                            <div style={styles.timestamp}>
-                                {formatTime(msg.timestamp)}
-                            </div>
+                            <div style={styles.timestamp}>{formatTime(msg.timestamp)}</div>
                         </div>
                     ))}
+                    {isUploading && <div style={{textAlign: 'center', color: '#888'}}>Uploading... ⏳</div>}
                 </div>
 
                 <div style={styles.inputArea}>
+                    {/* Hidden File Input */}
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        style={{display: 'none'}} 
+                        onChange={handleFileSelect}
+                    />
+                    
+                    {/* Paperclip Button */}
+                    <button 
+                        onClick={() => fileInputRef.current.click()} 
+                        style={styles.attachBtn} 
+                        disabled={!isAppointmentActive || isUploading}
+                        title="Attach File"
+                    >
+                        📎
+                    </button>
+
                     <input value={msgInput} onChange={(e) => setMsgInput(e.target.value)} style={styles.input} disabled={!isAppointmentActive}/>
                     <button onClick={sendMessage} style={styles.sendBtn} disabled={!isAppointmentActive}>Send</button>
                 </div>
@@ -580,39 +605,14 @@ const styles = {
     chatSection: { flex: 3, display: 'flex', flexDirection: 'column', background: '#f8f9fa' },
     chatHeader: { padding: '15px', background: '#007bff', color: 'white' },
     chatBox: { flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' },
-    
-    // Updated Message Bubbles
-    myMsg: { 
-        alignSelf: 'flex-end', 
-        background: '#dcf8c6', 
-        padding: '8px 12px', 
-        borderRadius: '10px 10px 0 10px', 
-        maxWidth: '80%',
-        boxShadow: '0 1px 1px rgba(0,0,0,0.1)'
-    },
-    theirMsg: { 
-        alignSelf: 'flex-start', 
-        background: '#fff', 
-        padding: '8px 12px', 
-        borderRadius: '10px 10px 10px 0', 
-        border: '1px solid #ddd', 
-        maxWidth: '80%',
-        boxShadow: '0 1px 1px rgba(0,0,0,0.1)'
-    },
-    
+    myMsg: { alignSelf: 'flex-end', background: '#dcf8c6', padding: '8px 12px', borderRadius: '10px 10px 0 10px', maxWidth: '80%', boxShadow: '0 1px 1px rgba(0,0,0,0.1)' },
+    theirMsg: { alignSelf: 'flex-start', background: '#fff', padding: '8px 12px', borderRadius: '10px 10px 10px 0', border: '1px solid #ddd', maxWidth: '80%', boxShadow: '0 1px 1px rgba(0,0,0,0.1)' },
     msgContent: { marginBottom: '4px' },
-    
-    // New Timestamp Style
-    timestamp: { 
-        fontSize: '0.75rem', 
-        color: '#666', 
-        textAlign: 'right', 
-        marginTop: '2px' 
-    },
-
-    inputArea: { padding: '15px', display: 'flex', gap: '10px', background: '#eee' },
+    timestamp: { fontSize: '0.75rem', color: '#666', textAlign: 'right', marginTop: '2px' },
+    inputArea: { padding: '15px', display: 'flex', gap: '10px', background: '#eee', alignItems: 'center' },
     input: { flex: 1, padding: '10px', borderRadius: '5px', border: '1px solid #ccc' },
     sendBtn: { padding: '10px 20px', background: '#28a745', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' },
+    attachBtn: { padding: '10px', background: '#6c757d', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '1.2rem' },
     inactiveMsg: { textAlign: 'center', color: 'white' },
     backBtn: { marginTop: '20px', padding: '10px 20px', background: '#dc3545', color: 'white', border: 'none', cursor: 'pointer', borderRadius: '4px'}
 };

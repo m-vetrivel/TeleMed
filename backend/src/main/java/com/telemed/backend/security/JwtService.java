@@ -1,30 +1,39 @@
 package com.telemed.backend.security;
 
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.security.core.userdetails.UserDetails; // Import this
 import org.springframework.stereotype.Service;
 
 import java.security.Key;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-
-import io.jsonwebtoken.Claims;
-import org.springframework.security.core.userdetails.UserDetails;
 import java.util.function.Function;
+
+// Import your User entity to access the Role
+import com.telemed.backend.model.User;
 
 @Service
 public class JwtService {
 
-    // This is your secret encryption key. In production, use an environment variable.
-    // It must be at least 256-bit (32 characters long).
     private static final String SECRET_KEY = "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970";
+
+    // --- NEW METHOD TO FIX RED LINE ---
+    public String generateToken(UserDetails userDetails) {
+        String username = userDetails.getUsername();
+        // We cast to our User entity to get the Role easily
+        String role = ((User) userDetails).getRole().name();
+        return generateToken(username, role);
+    }
+    // ----------------------------------
 
     public String generateToken(String username, String role) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("role", role); // <--- THIS WAS MISSING
+        claims.put("role", role);
         return createToken(claims, username);
     }
 
@@ -33,7 +42,7 @@ public class JwtService {
                 .setClaims(claims)
                 .setSubject(subject)
                 .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 10)) // 10 Hours validity
+                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 10))
                 .signWith(getSignKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
@@ -43,18 +52,15 @@ public class JwtService {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    // 1. Extract Username from Token
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
-    // 2. Extract specific Claim
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
     }
 
-    // 3. Decode the Token
     private Claims extractAllClaims(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getSignKey())
@@ -63,7 +69,6 @@ public class JwtService {
                 .getBody();
     }
 
-    // 4. Validate Token (Check if username matches & not expired)
     public boolean isTokenValid(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
         return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));

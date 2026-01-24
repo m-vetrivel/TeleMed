@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import api from '../services/api'; // Import the axios helper we made
-import { useNavigate } from 'react-router-dom';
+import api from '../services/api'; 
+import { useNavigate, Link } from 'react-router-dom'; // <--- Import Link
 
 const Login = () => {
     const [email, setEmail] = useState('');
@@ -11,14 +11,21 @@ const Login = () => {
     const handleLogin = async (e) => {
         e.preventDefault();
         try {
-            // 1. Call your Java Backend
             const response = await api.post('/auth/login', { email, password });
             
-            // 2. If success, save the JWT Token in browser storage
-            const token = response.data; // The long string "eyJ..."
-            localStorage.setItem('token', token);
+            // --- THE FIX IS HERE ---
+            // Backend returns: { "token": "eyJhb..." }
+            // We need to extract the .token property
+            const token = response.data.token; 
             
-            // 3. Move to the Dashboard
+            if (!token) {
+                setError("Login successful but no token received.");
+                return;
+            }
+
+            localStorage.setItem('token', token);
+            // -----------------------
+            
             navigate('/dashboard');
         } catch (err) {
             console.error(err);
@@ -49,13 +56,18 @@ const Login = () => {
                     />
                     <button type="submit" style={styles.button}>Login</button>
                 </form>
+                
                 {error && <p style={{color: 'red'}}>{error}</p>}
+
+                {/* --- ADDED LINK TO REGISTER PAGE --- */}
+                <p style={{marginTop: '15px', fontSize: '0.9rem'}}>
+                    New User? <Link to="/register" style={{color: '#007bff'}}>Create Account</Link>
+                </p>
             </div>
         </div>
     );
 };
 
-// Simple CSS-in-JS for quick styling (No external CSS needed yet)
 const styles = {
     container: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f0f2f5' },
     card: { padding: '2rem', background: 'white', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', textAlign: 'center' },
