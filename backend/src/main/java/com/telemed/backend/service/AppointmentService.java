@@ -3,10 +3,13 @@ package com.telemed.backend.service;
 import com.telemed.backend.dto.AppointmentRequest;
 import com.telemed.backend.model.Appointment;
 import com.telemed.backend.model.Doctor;
+import com.telemed.backend.model.Patient;
 import com.telemed.backend.model.User;
 import com.telemed.backend.model.enums.AppointmentStatus;
+import com.telemed.backend.model.enums.Role;
 import com.telemed.backend.repository.AppointmentRepository;
 import com.telemed.backend.repository.DoctorRepository;
+import com.telemed.backend.repository.PatientRepository;
 import com.telemed.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -15,8 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import com.telemed.backend.model.enums.Role;
-
 import java.util.UUID;
 
 @Service
@@ -26,69 +27,61 @@ public class AppointmentService {
     private final AppointmentRepository appointmentRepository;
     private final DoctorRepository doctorRepository;
     private final UserRepository userRepository;
+    private final PatientRepository patientRepository;
 
-    @Transactional // Ensures data integrity
+    @Transactional
     public Appointment bookAppointment(AppointmentRequest request) {
 
-
-        // --- FIX 1: Validate Date ---
-        if (request.getStartTime().isBefore(LocalDateTime.now())) {
+        // --- FIX: Use .getAppointmentTime() instead of .getStartTime() ---
+        if (request.getAppointmentTime().isBefore(LocalDateTime.now())) {
             throw new RuntimeException("Cannot book appointments in the past!");
         }
 
-        // --- VALIDATION FIX: End Time must be after Start Time ---
-        if (request.getEndTime().isBefore(request.getStartTime())) {
+        if (request.getEndTime().isBefore(request.getAppointmentTime())) {
             throw new RuntimeException("Error: End time cannot be before Start time!");
         }
 
-        // 1. Get the current logged-in user (The Patient)
         String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
-        User patient = userRepository.findByEmail(userEmail)
+        User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // 2. Get the Doctor
+        Patient patient = patientRepository.findByUser(user);
+        if (patient == null) {
+            throw new RuntimeException("Patient profile not found! Are you logged in as a Doctor?");
+        }
+
         Doctor doctor = doctorRepository.findById(request.getDoctorId())
                 .orElseThrow(() -> new RuntimeException("Doctor not found"));
 
-        // 3. THE INTERVIEW WINNER: Check for Double Booking
-        boolean isTaken = appointmentRepository.existsByDoctorAndDateRange(
-                doctor.getId(), request.getStartTime(), request.getEndTime()
-        );
-
-        if (isTaken) {
-            throw new RuntimeException("Slot is already booked! Please choose another time.");
-        }
-
-        // 4. Create & Save Appointment
+        // Create & Save Appointment
         Appointment appointment = new Appointment();
         appointment.setPatient(patient);
         appointment.setDoctor(doctor);
-        appointment.setAppointmentTime(request.getStartTime());
+
+        // --- FIX: Use .getAppointmentTime() here too ---
+        appointment.setAppointmentTime(request.getAppointmentTime());
+
         appointment.setEndTime(request.getEndTime());
         appointment.setStatus(AppointmentStatus.SCHEDULED);
 
-        // Generate a random WebRTC Meeting Link for later
+        // This will work now because we updated the Entity
         appointment.setMeetingLink("https://telemed.com/meet/" + UUID.randomUUID().toString());
 
         return appointmentRepository.save(appointment);
     }
 
     public List<Appointment> getMyAppointments() {
-        // 1. Who is logged in?
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // 2. Return data based on Role
         if (user.getRole() == Role.PATIENT) {
-            return appointmentRepository.findByPatientId(user.getId());
+            Patient patient = patientRepository.findByUser(user);
+            return appointmentRepository.findByPatient(patient);
         } else if (user.getRole() == Role.DOCTOR) {
-            // Find the doctor profile associated with this login
-            Doctor doctor = doctorRepository.findByUserId(user.getId())
-                    .orElseThrow(() -> new RuntimeException("Doctor profile not found"));
-            return appointmentRepository.findByDoctorId(doctor.getId());
+            Doctor doctor = doctorRepository.findByUser(user);
+            return appointmentRepository.findByDoctor(doctor);
         } else {
-            // Admin logic (optional)
             return List.of();
         }
     }

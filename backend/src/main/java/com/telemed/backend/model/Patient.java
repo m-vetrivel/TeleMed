@@ -13,25 +13,37 @@ public class Patient {
 
     @OneToOne
     @JoinColumn(name = "user_id", referencedColumnName = "id")
-    private User user; // Links back to the login email/password
+    private User user;
 
+    // --- 1. BASIC INFO ---
     private String fullName;
     private String gender;
+    private Integer age;       // From Set 1
+    private String bloodGroup; // From Set 1
+    private Integer weight;
+    private Integer height;
 
-    // Medical Details (Stored as Text/String for simplicity)
+    // --- 2. CONTACT INFO ---
+    private String phoneNumber; // From Set 1
+    private String address;     // From Set 1
+
+    // --- 3. DETAILED MEDICAL HISTORY ---
     @Column(columnDefinition = "TEXT")
-    private String preExistingConditions;
+    private String medicalHistory; // General Summary (From Set 1)
 
     @Column(columnDefinition = "TEXT")
-    private String familyMedicalHistory;
-
-    private String allergies; // Comma separated
-    private String currentMedications; // Comma separated
+    private String preExistingConditions; // Specific (From Set 2)
 
     @Column(columnDefinition = "TEXT")
-    private String previousSurgeries;
+    private String familyMedicalHistory; // (From Set 2)
 
-    // Preferences
-    private String preferredDoctorGender; // "Male", "Female", "No Preference"
-    private String preferredLanguage;
+    private String allergies;         // (From Set 2)
+    private String currentMedications; // (From Set 2)
+
+    @Column(columnDefinition = "TEXT")
+    private String previousSurgeries; // (From Set 2)
+
+    // --- 4. PREFERENCES ---
+    private String preferredDoctorGender; // (From Set 2)
+    private String preferredLanguage;     // (From Set 2)
 }

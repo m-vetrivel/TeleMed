@@ -1,6 +1,8 @@
 package com.telemed.backend.repository;
 
 import com.telemed.backend.model.Appointment;
+import com.telemed.backend.model.Doctor;
+import com.telemed.backend.model.Patient;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -25,4 +27,8 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     boolean existsByDoctorAndDateRange(@Param("doctorId") Long doctorId,
                                        @Param("startTime") LocalDateTime startTime,
                                        @Param("endTime") LocalDateTime endTime);
+
+    List<Appointment> findByDoctor(Doctor doctor);
+
+    List<Appointment> findByPatient(Patient patient);
 }

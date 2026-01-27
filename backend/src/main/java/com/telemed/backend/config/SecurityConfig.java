@@ -77,6 +77,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -94,42 +95,47 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // 1. Disable CSRF (Essential for APIs)
-                .csrf(csrf -> csrf.disable())
-
-                // 2. Configure CORS (Connects to our method below)
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-
-                // 3. Public vs Private URLs
+                .csrf(csrf -> csrf.disable()) // Disable CSRF for APIs
+                .cors(cors -> cors.configure(http)) // Enable CORS (important for React)
                 .authorizeHttpRequests(auth -> auth
-                        // Allow Login, Register, and WebSocket connections freely
-                        .requestMatchers("/api/auth/**", "/ws/**", "/ws-raw/**", "/api/files/**").permitAll()
-                        // All other requests require a valid Token
+                        // 1. ALLOW PUBLIC ACCESS TO AUTH ENDPOINTS
+                        .requestMatchers("/api/auth/**").permitAll()
+
+                        // 2. ALLOW PUBLIC ACCESS TO WEBSOCKET (for Chat)
+                        .requestMatchers("/ws/**", "/ws-raw/**").permitAll()
+
+                        // 3. ALLOW PUBLIC ACCESS TO FILES (for Images/Downloads)
+                        .requestMatchers("/api/files/**").permitAll()
+                        .requestMatchers("/api/appointments/**").authenticated()
+                        // ---------------------
+
+                        .requestMatchers("/api/doctors/**").authenticated()
+
+                        // 4. Everything else requires a Token
                         .anyRequest().authenticated()
                 )
-
-                // 4. Session Management (Stateless = No Cookies)
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
+                .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // --- THE KEY FIX FOR 403/CORS ---
-        // allowOriginPatterns("*") works with allowCredentials(true)
-        configuration.setAllowedOriginPatterns(List.of("http://localhost:5173",
-                "http://127.0.0.1:5173","http://10.130.58.125:5173/","https://justa-preoccasioned-sharlene.ngrok-free.dev" ));
+        // 1. Allow Frontend URL
+        configuration.setAllowedOrigins(List.of("http://localhost:5173"));
 
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
+        // 2. Allow ALL Methods (GET, POST, PUT, DELETE)
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
 
+        // 3. Allow Authorization Headers
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));
+
+        // 4. Register config
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;

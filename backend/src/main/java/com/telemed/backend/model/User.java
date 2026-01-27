@@ -1,11 +1,12 @@
 package com.telemed.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore; // <--- Import this
 import com.telemed.backend.model.enums.Role;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor; // <--- Add this
-import lombok.Builder;           // <--- Add this
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor; // <--- Add this
+import lombok.NoArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -14,9 +15,9 @@ import java.util.Collection;
 import java.util.List;
 
 @Data
-@Builder             // <--- Creates User.builder()
-@NoArgsConstructor   // <--- Required for JPA (Hibernate)
-@AllArgsConstructor  // <--- Required for @Builder to work
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @Entity
 @Table(name = "users")
 public class User implements UserDetails {
@@ -24,20 +25,23 @@ public class User implements UserDetails {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    // --- ADD THIS FIELD ---
-    @Column(name = "full_name") // Maps to the database column "full_name"
+
+    @Column(name = "full_name")
     private String fullName;
-    //
+
     private String email;
+
     @Column(name = "password_hash")
+    @JsonIgnore // <--- Good practice: Don't send password hash to frontend
     private String password;
 
     @Enumerated(EnumType.STRING)
     private Role role;
 
-    // --- UserDetails Methods ---
+    // --- UserDetails Methods (IGNORE THESE IN JSON) ---
 
     @Override
+    @JsonIgnore // <--- FIX FOR YOUR ERROR
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority(role.name()));
     }
@@ -53,14 +57,18 @@ public class User implements UserDetails {
     }
 
     @Override
+    @JsonIgnore // <--- Add here too
     public boolean isAccountNonExpired() { return true; }
 
     @Override
+    @JsonIgnore // <--- Add here too
     public boolean isAccountNonLocked() { return true; }
 
     @Override
+    @JsonIgnore // <--- Add here too
     public boolean isCredentialsNonExpired() { return true; }
 
     @Override
+    @JsonIgnore // <--- Add here too
     public boolean isEnabled() { return true; }
 }

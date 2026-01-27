@@ -17,7 +17,16 @@ public class Doctor {
 
     private String fullName;
     private String gender;
-    private String specialization; // e.g. "Cardiologist"
+
+    // Updated: Supports comma separated values (e.g., "Cardiology, Neurology")
+    private String specialization;
+
     private Integer experienceYears;
     private String licenseNumber;
+
+    // --- NEW FIELDS ---
+    private Double consultationFee;
+
+    @Column(columnDefinition = "TEXT") // Allows long text for bio
+    private String about;
 }

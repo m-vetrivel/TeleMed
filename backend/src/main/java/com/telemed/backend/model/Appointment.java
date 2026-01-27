@@ -2,14 +2,12 @@ package com.telemed.backend.model;
 
 import com.telemed.backend.model.enums.AppointmentStatus;
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.Data;
 import java.time.LocalDateTime;
 
+@Data
 @Entity
 @Table(name = "appointments")
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
 public class Appointment {
 
     @Id
@@ -17,25 +15,21 @@ public class Appointment {
     private Long id;
 
     @ManyToOne
-    @JoinColumn(name = "patient_id", nullable = false)
-    private User patient;
+    @JoinColumn(name = "patient_id")
+    private Patient patient;
 
     @ManyToOne
-    @JoinColumn(name = "doctor_id", nullable = false)
+    @JoinColumn(name = "doctor_id")
     private Doctor doctor;
 
-    @Column(nullable = false)
-    private LocalDateTime appointmentTime;
-
-    @Column(nullable = false)
+    private LocalDateTime appointmentTime; // <--- This is the field name
     private LocalDateTime endTime;
 
-    @Enumerated(EnumType.STRING)
-    private AppointmentStatus status = AppointmentStatus.SCHEDULED;
 
+    // --- ADD THIS MISSING FIELD ---
     private String meetingLink;
+    // ------------------------------
 
-    // Optimistic Locking: Prevents two people booking the same slot
-    @Version
-    private Long version;
+    @Enumerated(EnumType.STRING)
+    private AppointmentStatus status;
 }

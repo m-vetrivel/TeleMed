@@ -40,14 +40,11 @@ const PatientProfile = () => {
 
     const fetchPhoto = async () => {
         try {
-            // Fetch image as a Blob to create a local URL
             const res = await api.get('/files/photo', { responseType: 'blob' });
             if (res.data.size > 0) {
                 setPhotoUrl(URL.createObjectURL(res.data));
             }
-        } catch (err) { 
-            // Silent fail if no photo exists
-        }
+        } catch (err) { }
     };
 
     const fetchReports = async () => {
@@ -67,7 +64,7 @@ const PatientProfile = () => {
 
         try {
             await api.post('/files/photo', formData, { headers: { 'Content-Type': 'multipart/form-data' }});
-            setPhotoUrl(URL.createObjectURL(file)); // Immediate preview
+            setPhotoUrl(URL.createObjectURL(file)); 
             alert("Profile Photo Updated! 📸");
         } catch (err) { alert("Photo upload failed"); }
     };
@@ -86,11 +83,25 @@ const PatientProfile = () => {
             alert("Report Uploaded Successfully! 📂");
             setNewReportName("");
             setReportFile(null);
-            fetchReports(); // Refresh list
+            fetchReports(); 
         } catch (err) { 
             alert("Report upload failed"); 
         } finally {
             setIsUploading(false);
+        }
+    };
+
+    // --- NEW: DELETE REPORT HANDLER ---
+    const handleDeleteReport = async (fileId) => {
+        if(!window.confirm("Are you sure you want to delete this report? This cannot be undone.")) return;
+
+        try {
+            await api.delete(`/files/${fileId}`);
+            setReports(prev => prev.filter(r => r.id !== fileId)); // Remove from UI immediately
+            alert("Report deleted successfully 🗑️");
+        } catch (err) {
+            console.error(err);
+            alert("Failed to delete report.");
         }
     };
 
@@ -107,11 +118,8 @@ const PatientProfile = () => {
         }
     };
 
-    // --- LOGOUT HANDLER ---
     const handleLogout = () => {
-        // 1. Remove Token
         localStorage.removeItem('token');
-        // 2. Redirect to Login Page
         navigate('/login');
     };
 
@@ -119,7 +127,6 @@ const PatientProfile = () => {
 
     return (
         <div style={styles.container}>
-            {/* Header */}
             <div style={styles.header}>
                 <button onClick={() => navigate('/dashboard')} style={styles.backBtn}>← Back</button>
                 <h2 style={{color:'white', margin:0}}>My Medical Profile</h2>
@@ -131,8 +138,6 @@ const PatientProfile = () => {
                 {/* --- 1. HEADER ROW: PHOTO & EDIT BUTTON --- */}
                 <div style={styles.headerRow}>
                     <div style={{display:'flex', alignItems:'center', gap:'15px'}}>
-                        
-                        {/* Clickable Avatar for Photo Upload */}
                         <div 
                             style={styles.avatarWrapper} 
                             onClick={() => photoInputRef.current.click()}
@@ -145,7 +150,6 @@ const PatientProfile = () => {
                             )}
                             <div style={styles.cameraIcon}>📷</div>
                         </div>
-                        {/* Hidden Input for Photo */}
                         <input 
                             type="file" 
                             ref={photoInputRef} 
@@ -162,7 +166,6 @@ const PatientProfile = () => {
                         </div>
                     </div>
 
-                    {/* Edit Toggle Button */}
                     <button 
                         onClick={() => setIsEditing(!isEditing)} 
                         style={isEditing ? styles.cancelBtn : styles.editBtn}
@@ -176,7 +179,6 @@ const PatientProfile = () => {
                 {/* --- 2. HEALTH REPORTS SECTION --- */}
                 <h4 style={styles.sectionHeader}>Health Reports & Tests</h4>
                 
-                {/* Report Upload Form */}
                 <div style={styles.uploadBox}>
                     <input 
                         type="text" 
@@ -204,18 +206,29 @@ const PatientProfile = () => {
                     {reports.length === 0 ? <p style={{color:'#888', fontStyle:'italic'}}>No reports uploaded yet.</p> : (
                         reports.map(report => (
                             <div key={report.id} style={styles.reportItem}>
-                                <div>
+                                <div style={{flex: 1}}>
                                     <strong>{report.reportName}</strong>
                                     <div style={{fontSize:'0.8rem', color:'#666'}}>{new Date(report.uploadDate).toLocaleDateString()}</div>
                                 </div>
-                                <a 
-                                    href={`http://localhost:8080/api/files/${report.id}`} 
-                                    target="_blank" 
-                                    rel="noreferrer"
-                                    style={styles.viewLink}
-                                >
-                                    View / Download 📄
-                                </a>
+                                
+                                {/* Actions Container */}
+                                <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
+                                    <a 
+                                        href={`http://localhost:8080/api/files/${report.id}`} 
+                                        target="_blank" 
+                                        rel="noreferrer"
+                                        style={styles.viewLink}
+                                    >
+                                        View 📄
+                                    </a>
+                                    <button 
+                                        onClick={() => handleDeleteReport(report.id)}
+                                        style={styles.deleteIconBtn}
+                                        title="Delete File"
+                                    >
+                                        🗑️
+                                    </button>
+                                </div>
                             </div>
                         ))
                     )}
@@ -230,6 +243,8 @@ const PatientProfile = () => {
                     <Field label="Age" name="age" type="number" value={formData.age} isEditing={isEditing} onChange={setFormData} formData={formData} />
                     <Field label="Gender" name="gender" value={formData.gender} isEditing={isEditing} onChange={setFormData} formData={formData} placeholder="e.g. Male/Female" />
                     <Field label="Blood Group" name="bloodGroup" value={formData.bloodGroup} isEditing={isEditing} onChange={setFormData} formData={formData} placeholder="e.g. O+" />
+                    <Field label="Weight (kg)" name="weight" value={formData.weight} isEditing={isEditing} onChange={setFormData} formData={formData} />
+                    <Field label="Height (cm)" name="height" value={formData.height} isEditing={isEditing} onChange={setFormData} formData={formData} />
                     <Field label="Phone Number" name="phoneNumber" value={formData.phoneNumber} isEditing={isEditing} onChange={setFormData} formData={formData} />
                     <Field label="Address" name="address" value={formData.address} isEditing={isEditing} onChange={setFormData} formData={formData} />
                 </div>
@@ -237,38 +252,16 @@ const PatientProfile = () => {
                 {/* --- 4. MEDICAL HISTORY --- */}
                 <h4 style={styles.sectionHeader}>Medical History</h4>
                 
-                <TextAreaField 
-                    label="General Summary / Notes" 
-                    name="medicalHistory" 
-                    placeholder="General overview of your health..."
-                    value={formData.medicalHistory} isEditing={isEditing} onChange={setFormData} formData={formData} 
-                />
-
-                <TextAreaField 
-                    label="Pre-Existing Conditions" 
-                    name="preExistingConditions" 
-                    placeholder="e.g. Diabetes Type 2, Hypertension..."
-                    value={formData.preExistingConditions} isEditing={isEditing} onChange={setFormData} formData={formData} 
-                />
-                
-                <TextAreaField 
-                    label="Family Medical History" 
-                    name="familyMedicalHistory" 
-                    placeholder="e.g. Father had heart disease..."
-                    value={formData.familyMedicalHistory} isEditing={isEditing} onChange={setFormData} formData={formData} 
-                />
+                <TextAreaField label="General Summary" name="medicalHistory" placeholder="General overview..." value={formData.medicalHistory} isEditing={isEditing} onChange={setFormData} formData={formData} />
+                <TextAreaField label="Pre-Existing Conditions" name="preExistingConditions" placeholder="e.g. Diabetes..." value={formData.preExistingConditions} isEditing={isEditing} onChange={setFormData} formData={formData} />
+                <TextAreaField label="Family Medical History" name="familyMedicalHistory" placeholder="e.g. Heart disease..." value={formData.familyMedicalHistory} isEditing={isEditing} onChange={setFormData} formData={formData} />
 
                 <div style={styles.grid}>
-                    <Field label="Allergies" name="allergies" placeholder="e.g. Penicillin, Peanuts" value={formData.allergies} isEditing={isEditing} onChange={setFormData} formData={formData} />
-                    <Field label="Current Medications" name="currentMedications" placeholder="e.g. Metformin 500mg" value={formData.currentMedications} isEditing={isEditing} onChange={setFormData} formData={formData} />
+                    <Field label="Allergies" name="allergies" placeholder="e.g. Penicillin" value={formData.allergies} isEditing={isEditing} onChange={setFormData} formData={formData} />
+                    <Field label="Medications" name="currentMedications" placeholder="e.g. Metformin" value={formData.currentMedications} isEditing={isEditing} onChange={setFormData} formData={formData} />
                 </div>
 
-                <TextAreaField 
-                    label="Previous Surgeries" 
-                    name="previousSurgeries" 
-                    placeholder="e.g. Appendectomy (2015)..."
-                    value={formData.previousSurgeries} isEditing={isEditing} onChange={setFormData} formData={formData} 
-                />
+                <TextAreaField label="Previous Surgeries" name="previousSurgeries" placeholder="e.g. Appendectomy..." value={formData.previousSurgeries} isEditing={isEditing} onChange={setFormData} formData={formData} />
 
                 {/* --- 5. PREFERENCES --- */}
                 <h4 style={styles.sectionHeader}>Preferences</h4>
@@ -276,11 +269,7 @@ const PatientProfile = () => {
                     {isEditing ? (
                         <div style={{marginBottom:'15px'}}>
                             <label style={styles.label}>Preferred Doctor Gender</label>
-                            <select 
-                                style={styles.input}
-                                value={formData.preferredDoctorGender || ''}
-                                onChange={(e) => setFormData({...formData, preferredDoctorGender: e.target.value})}
-                            >
+                            <select style={styles.input} value={formData.preferredDoctorGender || ''} onChange={(e) => setFormData({...formData, preferredDoctorGender: e.target.value})}>
                                 <option value="">No Preference</option>
                                 <option value="Male">Male</option>
                                 <option value="Female">Female</option>
@@ -289,95 +278,59 @@ const PatientProfile = () => {
                     ) : (
                         <Field label="Preferred Doctor Gender" value={formData.preferredDoctorGender || 'No Preference'} isEditing={false} />
                     )}
-                    
-                    <Field label="Preferred Language" name="preferredLanguage" placeholder="e.g. English, Tamil" value={formData.preferredLanguage} isEditing={isEditing} onChange={setFormData} formData={formData} />
+                    <Field label="Preferred Language" name="preferredLanguage" value={formData.preferredLanguage} isEditing={isEditing} onChange={setFormData} formData={formData} />
                 </div>
 
-                {/* Save Button */}
-                {isEditing && (
-                    <button onClick={handleUpdate} style={styles.saveBtn}>Save Full Profile</button>
-                )}
+                {isEditing && <button onClick={handleUpdate} style={styles.saveBtn}>Save Full Profile</button>}
+                
                 <hr style={{margin:'40px 0 20px 0', border:'none', borderTop:'2px dashed #eee'}} />
-
-                {/* --- 5. LOGOUT BUTTON ONLY --- */}
-                <button onClick={handleLogout} style={styles.logoutBtn}>
-                    Logout 🚪
-                </button>
+                <button onClick={handleLogout} style={styles.logoutBtn}>Logout 🚪</button>
             </div>
         </div>
     );
 };
 
-// --- HELPER COMPONENTS (For cleaner JSX) ---
 const Field = ({ label, name, value, isEditing, onChange, formData, placeholder, type="text" }) => (
     <div style={{marginBottom:'15px'}}>
         <label style={styles.label}>{label}</label>
-        {isEditing ? (
-            <input 
-                type={type}
-                style={styles.input}
-                value={value || ''}
-                placeholder={placeholder}
-                onChange={(e) => onChange({...formData, [name]: e.target.value})}
-            />
-        ) : (
-            <div style={styles.value}>{value || '-'}</div>
-        )}
+        {isEditing ? <input type={type} style={styles.input} value={value || ''} placeholder={placeholder} onChange={(e) => onChange({...formData, [name]: e.target.value})} /> : <div style={styles.value}>{value || '-'}</div>}
     </div>
 );
 
 const TextAreaField = ({ label, name, value, isEditing, onChange, formData, placeholder }) => (
     <div style={{marginBottom:'15px'}}>
         <label style={styles.label}>{label}</label>
-        {isEditing ? (
-            <textarea 
-                style={styles.textarea}
-                value={value || ''}
-                placeholder={placeholder}
-                onChange={(e) => onChange({...formData, [name]: e.target.value})}
-            />
-        ) : (
-            <div style={{...styles.value, minHeight:'60px', whiteSpace: 'pre-wrap'}}>{value || '-'}</div>
-        )}
+        {isEditing ? <textarea style={styles.textarea} value={value || ''} placeholder={placeholder} onChange={(e) => onChange({...formData, [name]: e.target.value})} /> : <div style={{...styles.value, minHeight:'60px', whiteSpace: 'pre-wrap'}}>{value || '-'}</div>}
     </div>
 );
 
-// --- STYLES ---
 const styles = {
     container: { minHeight:'100vh', background:'#f0f2f5', fontFamily:'sans-serif', paddingBottom: '40px' },
     header: { background:'#007bff', padding:'20px', display:'flex', justifyContent:'space-between', alignItems:'center' },
     backBtn: { background:'rgba(255,255,255,0.2)', color:'white', border:'none', padding:'8px 15px', borderRadius:'20px', cursor:'pointer' },
     card: { maxWidth:'750px', margin:'30px auto 0', background:'white', padding:'30px', borderRadius:'15px', boxShadow:'0 4px 10px rgba(0,0,0,0.1)', position:'relative' },
-    
-    // Header & Avatar
     headerRow: { display:'flex', justifyContent:'space-between', alignItems:'center' },
     avatarWrapper: { position:'relative', cursor:'pointer', width:'70px', height:'70px' },
     avatarImg: { width:'70px', height:'70px', borderRadius:'50%', objectFit:'cover', border:'2px solid #007bff' },
     avatarPlaceholder: { width:'70px', height:'70px', background:'#e3f2fd', borderRadius:'50%', display:'flex', justifyContent:'center', alignItems:'center', fontSize:'2rem' },
     cameraIcon: { position:'absolute', bottom:0, right:0, background:'white', borderRadius:'50%', padding:'2px', fontSize:'0.8rem', boxShadow:'0 2px 5px rgba(0,0,0,0.2)' },
-    
-    // Upload & Reports
     uploadBox: { background:'#f9f9f9', padding:'15px', borderRadius:'10px', border:'1px dashed #ccc', display:'flex', gap:'10px', alignItems:'center', marginBottom:'20px', flexWrap:'wrap' },
     inputSmall: { padding:'8px', borderRadius:'5px', border:'1px solid #ccc', flex:1 },
     uploadBtn: { background:'#28a745', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px', cursor:'pointer' },
     reportsList: { display:'flex', flexDirection:'column', gap:'10px' },
     reportItem: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px', background:'white', border:'1px solid #eee', borderRadius:'8px', boxShadow:'0 2px 2px rgba(0,0,0,0.02)' },
     viewLink: { color:'#007bff', textDecoration:'none', fontWeight:'bold', fontSize:'0.9rem', border:'1px solid #007bff', padding:'5px 10px', borderRadius:'5px' },
-
-    // General Form
+    deleteIconBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '5px' },
     sectionHeader: { color: '#007bff', borderBottom: '2px solid #e3f2fd', paddingBottom: '5px', marginTop: '25px', marginBottom: '15px' },
     grid: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px' },
     label: { display:'block', fontSize:'0.85rem', color:'#666', marginBottom:'5px', fontWeight:'bold' },
     value: { padding:'10px', background:'#f9f9f9', borderRadius:'5px', border:'1px solid #eee', color:'#333' },
     input: { width:'100%', padding:'10px', borderRadius:'5px', border:'1px solid #ccc', boxSizing:'border-box' },
     textarea: { width:'100%', padding:'10px', borderRadius:'5px', border:'1px solid #ccc', minHeight:'80px', fontFamily:'sans-serif', boxSizing:'border-box', resize:'vertical' },
-    
-    // Buttons
     editBtn: { background:'#f8f9fa', border:'1px solid #ddd', padding:'8px 15px', borderRadius:'5px', cursor:'pointer', fontWeight:'bold' },
     cancelBtn: { background:'#ffebee', color:'#d32f2f', border:'none', padding:'8px 15px', borderRadius:'5px', cursor:'pointer', fontWeight:'bold' },
     saveBtn: { width:'100%', padding:'12px', background:'#28a745', color:'white', border:'none', borderRadius:'5px', fontSize:'1rem', marginTop:'20px', cursor:'pointer', fontWeight:'bold' },
     logoutBtn: { width:'100%', padding: '12px', background: '#6c757d', color: 'white', border: 'none', borderRadius: '5px', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold' }
-
 };
 
 export default PatientProfile;
