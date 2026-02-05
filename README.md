@@ -8,9 +8,7 @@
 - [🛠️ Tech Stack](#️-tech-stack)
 - [🏛️ System Architecture](#️-system-architecture)
 - [🚀 Getting Started](#-getting-started)
-- [📸 Screenshots](#-screenshots)
 - [🔮 Future Enhancements](#-future-enhancements)
-- [👨‍💻 Author](#-author)
 
 ---
 
@@ -27,11 +25,6 @@ Access to specialized healthcare in remote areas is often limited by travel dist
 * **Role-Based Access Control (RBAC):** Distinct, secure dashboards for **Doctors**, **Patients**, and **Admins**, powered by **Spring Security** and **JWT Authentication**.
 * **Real-Time Video Consultations:** Low-latency video conferencing integrated via **WebRTC standards (Jitsi Meet API)**.
 * **Smart Scheduling:** Dynamic appointment slot booking system that prevents double-booking and manages doctor availability.
-
-### 💾 Engineering Highlights (TCS Digital Focus)
-* **Hybrid Database Architecture:**
-    * **PostgreSQL (SQL):** Manages relational data requiring ACID compliance (User Auth, Appointment Logs, Billing).
-    * **MongoDB (NoSQL):** Manages high-volume, unstructured data (Patient Medical History, Lab Reports, Chat Logs).
 
 ---
 
@@ -107,7 +100,7 @@ cd ../frontend
 npm install
 npm start
 ```
-The application will launch at http://localhost:3000.
+The application will launch at http://localhost:5173.
 
 ##🔮 Future Enhancements
 [ ] AI Symptom Checker: Integration of an NLP-based chatbot for preliminary diagnosis.
