@@ -102,7 +102,8 @@ npm start
 ```
 The application will launch at http://localhost:5173.
 
-##🔮 Future Enhancements
+
+## Future Enhancements
 [ ] AI Symptom Checker: Integration of an NLP-based chatbot for preliminary diagnosis.
 
 [ ] Payment Gateway: Razorpay/Stripe integration for consultation fees.
