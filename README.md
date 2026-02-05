@@ -65,8 +65,8 @@ Follow these instructions to set up the project locally.
 
 ### 1. Clone the Repository
 ```bash
-git clone [https://github.com/Vetrivel/telemed-connect.git](https://github.com/Vetrivel/telemed-connect.git)
-cd telemed-connect
+git clone https://github.com/m-vetrivel/TeleMed
+cd TeleMed
 ```
 
 ## 2. Backend Setup
