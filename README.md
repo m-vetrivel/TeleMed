@@ -65,7 +65,7 @@ Follow these instructions to set up the project locally.
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/m-vetrivel/TeleMed
+git clone https://github.com/m-vetrivel/TeleMed.git
 cd TeleMed
 ```
 
